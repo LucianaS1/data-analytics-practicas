@@ -1,0 +1,83 @@
+USE Ventas_Tech_DB;
+GO
+
+--Consulta 1 — Vista base del proyecto (INNER JOIN)
+-- Propósito: Agrupar las dimensiones para poder visualizar el conjunto de tablas en un sólo esquema.
+
+SELECT 
+v.id_venta,
+v.fecha_venta AS fecha,
+v.cantidad,
+v.precio_unitario,
+(v.cantidad * v.precio_unitario) AS total_venta,
+c.id_cliente,
+c.nombre AS cliente,
+c.email AS email_cliente,
+c.ciudad,
+c.fecha_registro AS fecha_registro_cliente,
+p.id_producto,
+p.nombre_producto AS descripcion_producto,
+p.precio AS precio,
+p.stock,
+p.activo AS producto_activo,
+cat.id_categoria,
+cat.nombre_categoria AS categoria,
+cat.descripcion AS descripcion_categoria
+FROM Ventas v
+INNER JOIN Clientes AS c 
+ON v.id_cliente = c.id_cliente
+INNER JOIN Productos AS p 
+ON v.id_producto = p.id_producto
+INNER JOIN Categorias AS cat 
+ON p.id_categoria = cat.id_categoria;
+
+-- Hallazgo: Se consolidaron las 10 ventas registradas por un total de $6.204, distribuidas en 5 clientes de distintas provincias y 4 categorías de productos, destacando Computación como el rubro de mayor facturación.
+
+
+
+--Consulta 2 — Clientes sin ventas (LEFT JOIN)
+-- Propósito: detectar clientes registrados que nunca compraron, para contactarlos y ofrecerles una promoción.
+
+SELECT c.nombre, c.email, c.fecha_registro
+FROM Clientes as c
+LEFT JOIN Ventas as v
+ON c.id_cliente = v.id_cliente
+WHERE v.id_venta IS NULL;
+
+-- Hallazgo: No aparecieron registros, es decir, todos los clientes registrados realizaron al menos una compra este mes. CRM deberia apuntar a fidelizar a los clientes con sus campañas, ya que todos están activos.
+
+
+
+--Consulta 3 — Productos sin ventas (LEFT JOIN)
+-- Propósito: Promocionar aquellos productos que no se venden para bajar el stock.
+
+SELECT p.nombre_producto, p.precio, cat.nombre_categoria
+FROM Productos AS p
+LEFT JOIN Ventas as v
+ON p.id_producto = v.id_producto
+INNER JOIN Categorias AS cat 
+ON p.id_categoria = cat.id_categoria
+WHERE v.id_venta IS NULL;
+
+-- Hallazgo: Aparecieron cero registros: no existe ningún producto que no se venda. No es un riesgo la rotación de stock en este momento. Se podría apuntar, por ejemplo, a impulsar la venta de aquellos que generen más ganancia.
+
+
+
+--Consulta 4 — Consolidado por canal (UNION ALL)
+-- Propósito: Comparar el volumen de facturación entre las ventas locales de AMBA y los despachos al interior del país.
+
+SELECT zona, SUM(total) AS total_zona
+FROM (
+SELECT v.fecha_venta, v.cantidad * v.precio_unitario AS total, 'AMBA (Buenos Aires)' AS zona
+FROM Ventas AS v
+INNER JOIN Clientes AS c ON v.id_cliente = c.id_cliente
+WHERE c.ciudad = 'Buenos Aires'
+UNION ALL
+SELECT v.fecha_venta, v.cantidad * v.precio_unitario AS total, 'Envíos al Interior' AS zona
+FROM Ventas AS v
+INNER JOIN Clientes AS c ON v.id_cliente = c.id_cliente
+WHERE c.ciudad <> 'Buenos Aires'
+) AS consolidado
+GROUP BY zona;
+
+-- Hallazgo: Envíos al Interior lidera la facturación con $3.564 (57,4% del total) frente a los $2.640 de AMBA, lo que demuestra una fuerte demanda fuera de Buenos Aires.
